@@ -1,0 +1,36 @@
+Calculator App Specification
+
+1. Overview:
+   A simple calculator application for basic arithmetic operations.
+
+2. Features:
+   - Addition
+   - Subtraction
+   - Multiplication
+   - Division
+
+3. User Interface:
+   - Numeric keypad (0-9)
+   - Operation buttons (+, -, *, /)
+   - Equals button (=)
+   - Clear button (C)
+   - Display screen for input and results
+
+4. Functionality:
+   - Users can input numbers using the keypad
+   - Users can select an operation
+   - The app performs the calculation when the equals button is pressed
+   - Results are displayed on the screen
+   - The clear button resets the current calculation
+
+5. Error Handling:
+   - Display "Error" for division by zero
+   - Limit input to prevent overflow
+
+6. Platform:
+   - Mobile app (iOS and Android)
+
+7. Future Enhancements (optional):
+   - Scientific calculator functions
+   - History of calculations
+   - Theming options

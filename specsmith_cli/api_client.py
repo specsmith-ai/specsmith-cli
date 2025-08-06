@@ -8,6 +8,7 @@ import httpx
 from rich.console import Console
 
 from .config import Config
+from .errors import SpecsmithError, create_error_from_exception
 
 
 class SpecSmithAPIClient:
@@ -58,18 +59,13 @@ class SpecSmithAPIClient:
 
             return session_id
         except httpx.HTTPStatusError as e:
-            if e.response.status_code == 401:
-                raise ValueError(
-                    "Invalid API credentials. Please check your access key ID and token."
-                )
-            elif e.response.status_code == 404:
-                raise ValueError("API endpoint not found. Please check the API URL.")
-            else:
-                raise ValueError(
-                    f"API error: {e.response.status_code} - {e.response.text}"
-                )
+            # Create sanitized error
+            error = create_error_from_exception(e, self.config.debug)
+            raise error
         except Exception as e:
-            raise ValueError(f"Failed to create session: {e}")
+            # Create sanitized error
+            error = create_error_from_exception(e, self.config.debug)
+            raise error
 
     async def send_message(
         self, session_id: str, content: str
@@ -104,18 +100,13 @@ class SpecSmithAPIClient:
                                     continue
 
         except httpx.HTTPStatusError as e:
-            if e.response.status_code == 401:
-                raise ValueError(
-                    "Invalid API credentials. Please check your access key ID and token."
-                )
-            elif e.response.status_code == 404:
-                raise ValueError(f"Session not found: {session_id}")
-            else:
-                raise ValueError(
-                    f"API error: {e.response.status_code} - {e.response.text}"
-                )
+            # Create sanitized error
+            error = create_error_from_exception(e, self.config.debug)
+            raise error
         except Exception as e:
-            raise ValueError(f"Failed to send message: {e}")
+            # Create sanitized error
+            error = create_error_from_exception(e, self.config.debug)
+            raise error
 
     async def test_connection(self) -> bool:
         """Test the connection to the API."""

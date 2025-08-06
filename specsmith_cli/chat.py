@@ -3,7 +3,7 @@
 import asyncio
 import os
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, List
 
 from rich.console import Console
 from rich.live import Live
@@ -15,6 +15,7 @@ from rich.text import Text
 
 from .api_client import SpecSmithAPIClient
 from .config import Config
+from .errors import SpecsmithError, get_user_friendly_message
 
 
 class ChatInterface:
@@ -25,6 +26,7 @@ class ChatInterface:
         self.console = Console()
         self.session_id: Optional[str] = None
         self.api_client: Optional[SpecSmithAPIClient] = None
+        self.pending_file_saves: List[Dict[str, Any]] = []
 
     async def start(self, initial_message: Optional[str] = None) -> None:
         """Start the chat interface."""
@@ -57,8 +59,20 @@ class ChatInterface:
             # Start interactive loop
             await self._interactive_loop()
 
+        except (KeyboardInterrupt, EOFError):
+            # Handle Ctrl+C and Ctrl+D gracefully
+            self.console.print("\n[yellow]Goodbye![/yellow]")
+        except SpecsmithError as e:
+            # Display user-friendly error message
+            message = get_user_friendly_message(e)
+            self.console.print(f"[red]{message}[/red]")
         except Exception as e:
-            self.console.print(f"[red]❌ Error: {e}[/red]")
+            # Handle any other exceptions with sanitized messages
+            from .errors import create_error_from_exception
+
+            error = create_error_from_exception(e, self.config.debug)
+            message = get_user_friendly_message(error)
+            self.console.print(f"[red]{message}[/red]")
         finally:
             if self.api_client:
                 await self.api_client.aclose()
@@ -80,11 +94,21 @@ class ChatInterface:
                 # Send message and handle response
                 await self._send_message(message)
 
-            except KeyboardInterrupt:
+            except (KeyboardInterrupt, EOFError):
+                # Handle Ctrl+C and Ctrl+D gracefully
                 self.console.print("\n[yellow]Goodbye![/yellow]")
                 break
+            except SpecsmithError as e:
+                # Display user-friendly error message
+                message = get_user_friendly_message(e)
+                self.console.print(f"[red]{message}[/red]")
             except Exception as e:
-                self.console.print(f"[red]❌ Error: {e}[/red]")
+                # Handle any other exceptions with sanitized messages
+                from .errors import create_error_from_exception
+
+                error = create_error_from_exception(e, self.config.debug)
+                message = get_user_friendly_message(error)
+                self.console.print(f"[red]{message}[/red]")
 
     async def _send_message(self, message: str) -> None:
         """Send a message and handle the streaming response."""
@@ -92,18 +116,56 @@ class ChatInterface:
             raise ValueError("API client or session not initialized")
 
         try:
-            async for action in self.api_client.send_message(self.session_id, message):
-                if action.get("type") == "message":
-                    content = action.get("content", "")
-                    if content:
-                        # Print content immediately without newlines unless they exist in the text
-                        self.console.print(content, end="", markup=False)
-                else:
-                    # Handle non-message actions
-                    await self._handle_action(action)
+            # Print Specsmith header
+            self.console.print("\n[bold blue]Specsmith:[/bold blue]")
 
+            # Start with empty content for streaming
+            current_content = ""
+
+            # Create initial markdown for streaming updates
+            md = Markdown("")
+
+            # Use Live display for streaming updates without panel borders
+            with Live(md, refresh_per_second=4, console=self.console) as live:
+                # Show spinner while waiting for first response
+                spinner = Spinner("dots", text="...")
+                live.update(spinner)
+
+                async for action in self.api_client.send_message(
+                    self.session_id, message
+                ):
+                    if action.get("type") == "message":
+                        content = action.get("content", "")
+                        if content:
+                            current_content += content
+                            # Update the markdown content directly
+                            md = Markdown(current_content)
+                            live.update(md)
+                    else:
+                        # Handle non-message actions
+                        await self._handle_action(action)
+
+            # Final check if we have content
+            if not current_content or not current_content.strip():
+                self.console.print("[dim]No response received[/dim]")
+            else:
+                # Add a newline after the panel for better formatting
+                self.console.print()
+
+            # Process any pending file saves
+            await self._process_pending_file_saves()
+
+        except SpecsmithError as e:
+            # Display user-friendly error message
+            message = get_user_friendly_message(e)
+            self.console.print(f"[red]{message}[/red]")
         except Exception as e:
-            self.console.print(f"[red]❌ Error sending message: {e}[/red]")
+            # Handle any other exceptions with sanitized messages
+            from .errors import create_error_from_exception
+
+            error = create_error_from_exception(e, self.config.debug)
+            message = get_user_friendly_message(error)
+            self.console.print(f"[red]{message}[/red]")
 
     async def _handle_action(self, action: Dict[str, Any]) -> None:
         """Handle different types of actions from the API."""
@@ -116,19 +178,88 @@ class ChatInterface:
         elif action_type == "file":
             await self._handle_file_action(action)
 
+        elif action_type == "user_action":
+            await self._handle_user_action(action)
+
         else:
             # Unknown action type, just print it
             if self.config.debug:
                 self.console.print(f"[yellow]Unknown action type: {action}[/yellow]")
 
-    async def _handle_file_action(self, action: Dict[str, Any]) -> None:
-        """Handle file actions with user prompts."""
-        filename = action.get("filename", "")
-        content = action.get("content", "")
+    async def _handle_user_action(self, action: Dict[str, Any]) -> None:
+        """Handle user actions from tool call results."""
+        action_data = action.get("action", {})
+        action_type = action_data.get("type")
 
-        if not filename or not content:
-            return
+        if self.config.debug:
+            self.console.print(
+                f"[yellow]DEBUG: Received user_action: {action}[/yellow]"
+            )
+            self.console.print(f"[yellow]DEBUG: action_data: {action_data}[/yellow]")
+            self.console.print(f"[yellow]DEBUG: action_type: {action_type}[/yellow]")
 
+        if action_type == "file_saved":
+            # Handle file save action - collect for later processing
+            file_name = action_data.get("file_name", "")
+            content = action_data.get("content", "")
+            operation = action_data.get("operation", "saved")
+            spec_id = action_data.get("spec_id", "")
+
+            if self.config.debug:
+                self.console.print(f"[yellow]DEBUG: file_name: {file_name}[/yellow]")
+                self.console.print(
+                    f"[yellow]DEBUG: content length: {len(content) if content else 0}[/yellow]"
+                )
+                self.console.print(f"[yellow]DEBUG: operation: {operation}[/yellow]")
+                self.console.print(f"[yellow]DEBUG: spec_id: {spec_id}[/yellow]")
+
+            # Display success message
+            self.console.print(
+                f"\n[green]✅ Specification {operation} successfully![/green]"
+            )
+            self.console.print(f"  • File Name: {file_name}")
+            if spec_id:
+                self.console.print(f"  • Specification ID: {spec_id}")
+
+            # Collect file save for later processing
+            if file_name and content:
+                self.pending_file_saves.append(
+                    {"filename": file_name, "content": content}
+                )
+            else:
+                if self.config.debug:
+                    self.console.print(
+                        f"[yellow]DEBUG: Skipping file save - missing file_name or content[/yellow]"
+                    )
+
+        elif action_type == "tag_created":
+            tag_value = action_data.get("tag_value", "")
+            tag_id = action_data.get("tag_id", "")
+            created_at = action_data.get("created_at", "")
+
+            self.console.print(f"\n[green]✅ Tag created successfully![/green]")
+            self.console.print(f"  • Tag Value: {tag_value}")
+            if tag_id:
+                self.console.print(f"  • Tag ID: {tag_id}")
+            if created_at:
+                self.console.print(f"  • Created at: {created_at}")
+
+        elif action_type == "error":
+            tool_name = action_data.get("tool", "unknown")
+            message = action_data.get("message", "An error occurred")
+
+            self.console.print(f"\n[red]❌ Error in {tool_name}: {message}[/red]")
+
+        else:
+            # Unknown user action type, print it in debug mode
+            if self.config.debug:
+                self.console.print(
+                    f"[yellow]Unknown user action type: {action_type}[/yellow]"
+                )
+                self.console.print(f"[yellow]Action data: {action_data}[/yellow]")
+
+    def _handle_file_save(self, filename: str, content: str) -> None:
+        """Handle file save action with user prompts."""
         file_path = Path(filename)
 
         # Check if file exists
@@ -173,11 +304,40 @@ class ChatInterface:
             # Send message and handle response
             await self._send_message(message)
 
+        except (KeyboardInterrupt, EOFError):
+            # Handle Ctrl+C and Ctrl+D gracefully
+            self.console.print("\n[yellow]Goodbye![/yellow]")
+        except SpecsmithError as e:
+            # Display user-friendly error message
+            message = get_user_friendly_message(e)
+            self.console.print(f"[red]{message}[/red]")
         except Exception as e:
-            self.console.print(f"[red]❌ Error: {e}[/red]")
+            # Handle any other exceptions with sanitized messages
+            from .errors import create_error_from_exception
+
+            error = create_error_from_exception(e, self.config.debug)
+            message = get_user_friendly_message(error)
+            self.console.print(f"[red]{message}[/red]")
         finally:
             if self.api_client:
                 await self.api_client.aclose()
+
+    async def _process_pending_file_saves(self) -> None:
+        """Process any pending file saves after streaming is complete."""
+        if not self.pending_file_saves:
+            return
+
+        self.console.print("\n[blue]📁 File Save Options:[/blue]")
+
+        for file_save in self.pending_file_saves:
+            filename = file_save["filename"]
+            content = file_save["content"]
+
+            # Handle file save with user prompts
+            self._handle_file_save(filename, content)
+
+        # Clear the pending list
+        self.pending_file_saves.clear()
 
 
 async def run_chat(
