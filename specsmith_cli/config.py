@@ -1,167 +1,157 @@
-"""Configuration management for the SpecSmith CLI."""
+"""Configuration management for the Specsmith CLI."""
 
-import base64
 import os
-from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Optional
+
+from rich.console import Console
+from rich.prompt import Prompt
+
+console = Console()
 
 
-@dataclass
 class Config:
-    """Configuration for the SpecSmith CLI."""
+    """Configuration for the Specsmith CLI."""
 
-    api_url: str
-    access_key_id: str
-    access_key_token: str
-    debug: bool = False
+    def __init__(
+        self,
+        api_url: str,
+        access_key_id: str,
+        access_key_token: str,
+        debug: bool = False,
+    ):
+        self.api_url = api_url.rstrip("/")
+        self.access_key_id = access_key_id
+        self.access_key_token = access_key_token
+        self.debug = debug
 
     @property
     def auth_header(self) -> str:
-        """Generate the Basic Auth header."""
+        """Get the authorization header for API requests."""
+        import base64
+
         credentials = f"{self.access_key_id}:{self.access_key_token}"
-        encoded = base64.b64encode(credentials.encode()).decode()
-        return f"Basic {encoded}"
+        encoded_credentials = base64.b64encode(credentials.encode()).decode()
+        return f"Basic {encoded_credentials}"
 
+    @classmethod
+    def get_config_dir(cls) -> Path:
+        """Get the configuration directory."""
+        return Path.home() / ".specsmith"
 
-def get_config_dir() -> Path:
-    """Get the configuration directory."""
-    return Path.home() / ".specsmith"
+    @classmethod
+    def get_credentials_file(cls) -> Path:
+        """Get the credentials file path."""
+        return cls.get_config_dir() / "credentials"
 
+    @classmethod
+    def load_from_file(cls) -> Optional["Config"]:
+        """Load configuration from file."""
+        credentials_file = cls.get_credentials_file()
 
-def get_credentials_file() -> Path:
-    """Get the credentials file path."""
-    return get_config_dir() / "credentials"
+        if not credentials_file.exists():
+            return None
 
+        try:
+            with open(credentials_file, "r") as f:
+                content = f.read()
 
-def load_credentials_from_file() -> Optional[Tuple[str, str]]:
-    """Load credentials from the config file."""
-    cred_file = get_credentials_file()
+            # Parse key=value format
+            config_dict = {}
+            for line in content.splitlines():
+                line = line.strip()
+                if line and "=" in line:
+                    key, value = line.split("=", 1)
+                    config_dict[key.strip()] = value.strip()
 
-    if not cred_file.exists():
-        return None
+            # Extract values with defaults
+            api_url = config_dict.get("api_url", "http://localhost:8000")
+            access_key_id = config_dict.get("access_key_id")
+            access_key_token = config_dict.get("access_key_token")
+            debug = config_dict.get("debug", "false").lower() == "true"
 
-    try:
-        with open(cred_file, "r") as f:
-            lines = f.readlines()
+            if not access_key_id or not access_key_token:
+                return None
 
-        access_key_id = None
-        access_key_token = None
+            return cls(api_url, access_key_id, access_key_token, debug)
 
-        for line in lines:
-            line = line.strip()
-            if line.startswith("access_key_id="):
-                access_key_id = line.split("=", 1)[1]
-            elif line.startswith("access_key_token="):
-                access_key_token = line.split("=", 1)[1]
+        except Exception as e:
+            if debug:
+                console.print(f"[yellow]Failed to load credentials: {e}[/yellow]")
+            return None
 
-        if access_key_id and access_key_token:
-            return access_key_id, access_key_token
+    def save_to_file(self) -> None:
+        """Save configuration to file."""
+        config_dir = self.get_config_dir()
+        config_dir.mkdir(parents=True, exist_ok=True)
 
-    except Exception:
-        pass
-
-    return None
-
-
-def save_credentials_to_file(access_key_id: str, access_key_token: str) -> None:
-    """Save credentials to the config file."""
-    config_dir = get_config_dir()
-    config_dir.mkdir(parents=True, exist_ok=True)
-
-    cred_file = get_credentials_file()
-    with open(cred_file, "w") as f:
-        f.write(f"access_key_id={access_key_id}\n")
-        f.write(f"access_key_token={access_key_token}\n")
-
-    # Set restrictive permissions
-    cred_file.chmod(0o600)
+        credentials_file = self.get_credentials_file()
+        with open(credentials_file, "w") as f:
+            f.write(f"api_url={self.api_url}\n")
+            f.write(f"access_key_id={self.access_key_id}\n")
+            f.write(f"access_key_token={self.access_key_token}\n")
+            f.write(f"debug={str(self.debug).lower()}\n")
 
 
 def load_config(
     api_url: Optional[str] = None,
     access_key_id: Optional[str] = None,
     access_key_token: Optional[str] = None,
-    debug: bool = False,
+    debug: Optional[bool] = None,
 ) -> Config:
     """Load configuration from various sources."""
-
-    # API URL: command line > environment > default
+    # Environment variables
     final_api_url = api_url or os.getenv("SPECSMITH_API_URL") or "http://localhost:8000"
-
-    # Access key ID: command line > environment > config file
     final_access_key_id = access_key_id or os.getenv("SPECSMITH_ACCESS_KEY_ID")
     final_access_key_token = access_key_token or os.getenv("SPECSMITH_ACCESS_KEY_TOKEN")
-
-    # If not provided via command line or environment, try config file
-    if not final_access_key_id or not final_access_key_token:
-        file_creds = load_credentials_from_file()
-        if file_creds:
-            file_key_id, file_key_token = file_creds
-            final_access_key_id = final_access_key_id or file_key_id
-            final_access_key_token = final_access_key_token or file_key_token
-
-    # Debug: command line > environment
     final_debug = debug or os.getenv("SPECSMITH_DEBUG", "").lower() in (
         "1",
         "true",
         "yes",
     )
 
+    # Try to load from file if credentials not provided
+    if not final_access_key_id or not final_access_key_token:
+        file_config = Config.load_from_file()
+        if file_config:
+            final_access_key_id = final_access_key_id or file_config.access_key_id
+            final_access_key_token = (
+                final_access_key_token or file_config.access_key_token
+            )
+            final_debug = final_debug or file_config.debug
+
     if not final_access_key_id or not final_access_key_token:
         raise ValueError(
-            "API credentials not found. Please set them via:\n"
+            "API credentials not found. Please set up credentials using:\n"
             "1. Environment variables: SPECSMITH_ACCESS_KEY_ID and SPECSMITH_ACCESS_KEY_TOKEN\n"
             "2. Config file: ~/.specsmith/credentials\n"
-            "3. Command line arguments: --access-key-id and --access-key-token"
+            "3. Run 'specsmith setup' to configure interactively"
         )
 
     return Config(
-        api_url=final_api_url,
-        access_key_id=final_access_key_id,
-        access_key_token=final_access_key_token,
-        debug=final_debug,
+        final_api_url, final_access_key_id, final_access_key_token, final_debug
     )
 
 
 def setup_credentials_interactive() -> None:
     """Set up credentials interactively."""
-    print("Setting up SpecSmith CLI credentials...")
-    print("You can get your API keys from the SpecSmith web interface.")
-    print()
+    console.print("Setting up Specsmith CLI credentials...")
+    console.print("You can get your API keys from the Specsmith web interface.")
+    console.print()
 
-    access_key_id = input("Enter your Access Key ID: ").strip()
-    access_key_token = input("Enter your Access Key Token: ").strip()
+    api_url = Prompt.ask("API URL", default="http://localhost:8000")
+    access_key_id = Prompt.ask("Access Key ID")
+    access_key_token = Prompt.ask("Access Key Token", password=True)
+    debug = Prompt.ask("Enable debug mode?", choices=["y", "n"], default="n") == "y"
 
-    if not access_key_id or not access_key_token:
-        print("❌ Both Access Key ID and Access Key Token are required.")
-        return
+    config = Config(api_url, access_key_id, access_key_token, debug)
+    config.save_to_file()
 
-    try:
-        save_credentials_to_file(access_key_id, access_key_token)
-        print("✅ Credentials saved to ~/.specsmith/credentials")
-    except Exception as e:
-        print(f"❌ Failed to save credentials: {e}")
+    console.print("✅ Credentials saved to ~/.specsmith/credentials")
 
 
 def validate_credentials(config: Config) -> bool:
-    """Validate that the credentials are properly formatted."""
-    try:
-        # Check for empty credentials
-        if not config.access_key_id or not config.access_key_token:
-            return False
-
-        # Test that we can create the auth header
-        auth_header = config.auth_header
-        if not auth_header.startswith("Basic "):
-            return False
-
-        # Test base64 decoding
-        encoded_part = auth_header[6:]  # Remove "Basic "
-        decoded = base64.b64decode(encoded_part).decode()
-        if ":" not in decoded:
-            return False
-
-        return True
-    except Exception:
+    """Validate that credentials are properly formatted."""
+    if not config.access_key_id or not config.access_key_token:
         return False
+    return True

@@ -1,4 +1,4 @@
-"""Main CLI entry point for SpecSmith."""
+"""Main CLI entry point for Specsmith."""
 
 import asyncio
 import sys
@@ -23,17 +23,17 @@ console = Console()
     "--api-url",
     envvar="SPECSMITH_API_URL",
     default="http://localhost:8000",
-    help="SpecSmith API URL",
+    help="Specsmith API URL",
 )
 @click.option(
     "--access-key-id",
     envvar="SPECSMITH_ACCESS_KEY_ID",
-    help="SpecSmith Access Key ID",
+    help="Specsmith Access Key ID",
 )
 @click.option(
     "--access-key-token",
     envvar="SPECSMITH_ACCESS_KEY_TOKEN",
-    help="SpecSmith Access Key Token",
+    help="Specsmith Access Key Token",
 )
 @click.option(
     "--debug",
@@ -49,7 +49,7 @@ def main(
     access_key_token: Optional[str],
     debug: bool,
 ) -> None:
-    """SpecSmith CLI - Command line interface for SpecSmith."""
+    """Specsmith CLI - Command line interface for Specsmith."""
     ctx.ensure_object(dict)
 
     # Store raw options for commands that don't need full config
@@ -86,7 +86,7 @@ def main(
 @click.argument("message", required=False)
 @click.pass_context
 def chat(ctx: click.Context, interactive: bool, message: Optional[str]) -> None:
-    """Start a chat session with SpecSmith."""
+    """Start a chat session with Specsmith."""
     config: Config = ctx.obj.get("config")
 
     if config is None:
@@ -118,10 +118,10 @@ def chat(ctx: click.Context, interactive: bool, message: Optional[str]) -> None:
 @click.pass_context
 def setup(ctx: click.Context) -> None:
     """Set up API credentials interactively."""
-    console.print("[bold blue]SpecSmith CLI Setup[/bold blue]")
+    console.print("[bold blue]Specsmith CLI Setup[/bold blue]")
     console.print()
     console.print("This will help you configure your API credentials.")
-    console.print("You can get your API keys from the SpecSmith web interface.")
+    console.print("You can get your API keys from the Specsmith web interface.")
     console.print()
 
     setup_credentials_interactive()
@@ -130,7 +130,7 @@ def setup(ctx: click.Context) -> None:
 @main.command()
 @click.pass_context
 def test(ctx: click.Context) -> None:
-    """Test the connection to the SpecSmith API."""
+    """Test the connection to the Specsmith API."""
     config: Config = ctx.obj.get("config")
 
     if config is None:
@@ -139,7 +139,7 @@ def test(ctx: click.Context) -> None:
         )
         sys.exit(1)
 
-    console.print("[blue]Testing connection to SpecSmith API...[/blue]")
+    console.print("[blue]Testing connection to Specsmith API...[/blue]")
 
     async def test_connection():
         from .api_client import SpecSmithAPIClient
@@ -187,7 +187,7 @@ def version() -> None:
     """Show version information."""
     from . import __version__
 
-    console.print(f"SpecSmith CLI v{__version__}")
+    console.print(f"Specsmith CLI v{__version__}")
 
 
 if __name__ == "__main__":

@@ -1,4 +1,4 @@
-"""Chat interface for the SpecSmith CLI."""
+"""Chat interface for the Specsmith CLI."""
 
 import asyncio
 import os
@@ -18,7 +18,7 @@ from .config import Config
 
 
 class ChatInterface:
-    """Interactive chat interface for SpecSmith CLI."""
+    """Interactive chat interface for Specsmith CLI."""
 
     def __init__(self, config: Config):
         self.config = config
@@ -33,25 +33,25 @@ class ChatInterface:
             self.api_client = SpecSmithAPIClient(self.config)
 
             # Test connection
-            self.console.print("[blue]Testing connection to SpecSmith API...[/blue]")
+            self.console.print("[blue]Testing connection to Specsmith API...[/blue]")
             if not await self.api_client.test_connection():
-                self.console.print("[red]❌ Failed to connect to SpecSmith API[/red]")
+                self.console.print("[red]❌ Failed to connect to Specsmith API[/red]")
                 self.console.print("Please check:")
                 self.console.print("1. The API is running")
                 self.console.print("2. Your API credentials are correct")
                 self.console.print("3. The API URL is correct")
                 return
 
-            self.console.print("[green]✅ Connected to SpecSmith API[/green]")
+            self.console.print("[green]✅ Connected to Specsmith API[/green]")
 
-            # Create session
+            # Create session for chat
             self.session_id = await self.api_client.create_session()
 
             # Send initial message if provided
             if initial_message:
                 await self._send_message(initial_message)
             else:
-                self.console.print("\n[bold blue]SpecSmith Chat[/bold blue]")
+                self.console.print("\n[bold blue]Specsmith Chat[/bold blue]")
                 self.console.print("Type your message or 'quit' to exit.\n")
 
             # Start interactive loop
@@ -91,32 +91,27 @@ class ChatInterface:
         if not self.api_client or not self.session_id:
             raise ValueError("API client or session not initialized")
 
-        # Show typing indicator
-        with Live(
-            Panel(Spinner("dots", text="Thinking..."), title="SpecSmith"),
-            console=self.console,
-            refresh_per_second=10,
-        ):
-            try:
-                async for action in self.api_client.send_message(
-                    self.session_id, message
-                ):
+        try:
+            async for action in self.api_client.send_message(self.session_id, message):
+                if action.get("type") == "message":
+                    content = action.get("content", "")
+                    if content:
+                        # Print content immediately without newlines unless they exist in the text
+                        self.console.print(content, end="", markup=False)
+                else:
+                    # Handle non-message actions
                     await self._handle_action(action)
-            except Exception as e:
-                self.console.print(f"[red]❌ Error sending message: {e}[/red]")
+
+        except Exception as e:
+            self.console.print(f"[red]❌ Error sending message: {e}[/red]")
 
     async def _handle_action(self, action: Dict[str, Any]) -> None:
         """Handle different types of actions from the API."""
         action_type = action.get("type")
 
         if action_type == "message":
-            content = action.get("content", "")
-            if content:
-                # Render markdown content
-                md = Markdown(content)
-                self.console.print(
-                    Panel(md, title="[bold green]SpecSmith[/bold green]")
-                )
+            # Content is handled in _send_message for streaming
+            pass
 
         elif action_type == "file":
             await self._handle_file_action(action)

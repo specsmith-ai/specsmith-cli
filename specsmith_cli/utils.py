@@ -1,4 +1,4 @@
-"""Utility functions for the SpecSmith CLI."""
+"""Utility functions for the Specsmith CLI."""
 
 import os
 import sys

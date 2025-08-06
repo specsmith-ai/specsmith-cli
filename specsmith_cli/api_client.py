@@ -1,4 +1,4 @@
-"""API client for communicating with the SpecSmith Agent API."""
+"""API client for communicating with the Specsmith Agent API."""
 
 import asyncio
 import json
@@ -11,7 +11,7 @@ from .config import Config
 
 
 class SpecSmithAPIClient:
-    """Client for communicating with the SpecSmith Agent API."""
+    """Client for communicating with the Specsmith Agent API."""
 
     def __init__(self, config: Config):
         self.config = config
@@ -22,6 +22,10 @@ class SpecSmithAPIClient:
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
+        await self.client.aclose()
+
+    async def aclose(self):
+        """Close the client."""
         await self.client.aclose()
 
     async def health_check(self) -> bool:
@@ -120,17 +124,28 @@ class SpecSmithAPIClient:
             if not await self.health_check():
                 return False
 
-            # Then try to create a session
-            session_id = await self.create_session()
+            # Then test authentication
+            try:
+                response = await self.client.get(
+                    f"{self.config.api_url}/agent/auth",
+                    headers={
+                        "Authorization": self.config.auth_header,
+                    },
+                )
+                response.raise_for_status()
+                return True
+            except httpx.HTTPStatusError as e:
+                if e.response.status_code == 401:
+                    if self.config.debug:
+                        self.console.print("[red]Authentication failed[/red]")
+                    return False
+                else:
+                    if self.config.debug:
+                        self.console.print(
+                            f"[red]Auth check failed: {e.response.status_code}[/red]"
+                        )
+                    return False
 
-            # Send a test message
-            test_message = "Hello! This is a test message."
-            async for action in self.send_message(session_id, test_message):
-                if action.get("type") == "message":
-                    # Got a response, connection is working
-                    return True
-
-            return False
         except Exception as e:
             if self.config.debug:
                 self.console.print(f"[red]Connection test failed: {e}[/red]")
