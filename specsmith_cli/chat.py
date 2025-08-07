@@ -5,11 +5,14 @@ import os
 from pathlib import Path
 from typing import Any, Dict, Optional, List
 
+from prompt_toolkit import PromptSession
+from prompt_toolkit.key_binding import KeyBindings
+from prompt_toolkit.patch_stdout import patch_stdout
 from rich.console import Console
 from rich.live import Live
 from rich.markdown import Markdown
 from rich.panel import Panel
-from rich.prompt import Confirm, Prompt
+from rich.prompt import Confirm
 from rich.spinner import Spinner
 from rich.text import Text
 
@@ -27,6 +30,24 @@ class ChatInterface:
         self.session_id: Optional[str] = None
         self.api_client: Optional[SpecSmithAPIClient] = None
         self.pending_file_saves: List[Dict[str, Any]] = []
+
+        # Initialize prompt-toolkit session with custom key bindings
+        self.prompt_session = PromptSession()
+        self.kb = KeyBindings()
+
+        @self.kb.add("enter")
+        def _(event):
+            buffer = event.app.current_buffer
+            if buffer.document.text.endswith("\n"):
+                # Submit on double enter
+                buffer.validate_and_handle()
+            else:
+                buffer.insert_text("\n")
+
+        @self.kb.add("c-j")  # Ctrl+J for enter
+        def _(event):
+            buffer = event.app.current_buffer
+            buffer.validate_and_handle()
 
     async def start(self, initial_message: Optional[str] = None) -> None:
         """Start the chat interface."""
@@ -81,8 +102,12 @@ class ChatInterface:
         """Main interactive chat loop."""
         while True:
             try:
-                # Get user input
-                message = Prompt.ask("\n[bold cyan]You[/bold cyan]")
+                # Get user input using prompt-toolkit
+                self.console.print("\n[bold cyan]You[/bold cyan]")
+                with patch_stdout():
+                    message = await self.prompt_session.prompt_async(
+                        ">>> ", multiline=True, key_bindings=self.kb
+                    )
 
                 if message.lower() in ("quit", "exit", "q"):
                     self.console.print("[yellow]Goodbye![/yellow]")
@@ -128,7 +153,7 @@ class ChatInterface:
             # Use Live display for streaming updates without panel borders
             with Live(md, refresh_per_second=4, console=self.console) as live:
                 # Show spinner while waiting for first response
-                spinner = Spinner("dots", text="...")
+                spinner = Spinner("dots")
                 live.update(spinner)
 
                 async for action in self.api_client.send_message(
