@@ -8,6 +8,8 @@ from typing import Optional
 from rich.console import Console
 from rich.prompt import Prompt
 
+from .constants import DEFAULT_API_URL
+
 console = Console()
 
 
@@ -64,7 +66,7 @@ class Config:
                     config_dict[key.strip()] = value.strip()
 
             # Extract values with defaults
-            api_url = config_dict.get("api_url", "http://localhost:8000")
+            api_url = config_dict.get("api_url", DEFAULT_API_URL)
             access_key_id = config_dict.get("access_key_id")
             access_key_token = config_dict.get("access_key_token")
             debug = config_dict.get("debug", "false").lower() == "true"
@@ -100,7 +102,7 @@ def load_config(
 ) -> Config:
     """Load configuration from various sources."""
     # Environment variables
-    final_api_url = api_url or os.getenv("SPECSMITH_API_URL") or "http://localhost:8000"
+    final_api_url = api_url or os.getenv("SPECSMITH_API_URL") or DEFAULT_API_URL
     final_access_key_id = access_key_id or os.getenv("SPECSMITH_ACCESS_KEY_ID")
     final_access_key_token = access_key_token or os.getenv("SPECSMITH_ACCESS_KEY_TOKEN")
     final_debug = debug or os.getenv("SPECSMITH_DEBUG", "").lower() in (
@@ -138,12 +140,10 @@ def setup_credentials_interactive() -> None:
     console.print("You can get your API keys from the Specsmith web interface.")
     console.print()
 
-    api_url = Prompt.ask("API URL", default="https://api.specsmith.ai")
     access_key_id = Prompt.ask("Access Key ID")
     access_key_token = Prompt.ask("Access Key Token", password=True)
-    debug = Prompt.ask("Enable debug mode?", choices=["y", "n"], default="n") == "y"
 
-    config = Config(api_url, access_key_id, access_key_token, debug)
+    config = Config(DEFAULT_API_URL, access_key_id, access_key_token)
     config.save_to_file()
 
     console.print("✅ Credentials saved to ~/.specsmith/credentials")

@@ -29,10 +29,10 @@ class ChatInterface:
             self.console.print("[blue]Testing connection to Specsmith API...[/blue]")
             if not await self.api_client.test_connection():
                 self.console.print("[red]❌ Failed to connect to Specsmith API[/red]")
-                self.console.print("Please check:")
-                self.console.print("1. The API is running")
-                self.console.print("2. Your API credentials are correct")
-                self.console.print("3. The API URL is correct")
+                self.console.print(
+                    "Please check that your API credentials are correct."
+                )
+                self.console.print("You can update them by running: specsmith setup")
                 return
 
             self.console.print("[green]✅ Connected to Specsmith API[/green]")

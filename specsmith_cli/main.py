@@ -144,10 +144,8 @@ def test(ctx: click.Context) -> None:
                 console.print("Your credentials are working correctly.")
             else:
                 console.print("[red]❌ Connection failed[/red]")
-                console.print("Please check:")
-                console.print("1. The API is running")
-                console.print("2. Your API credentials are correct")
-                console.print("3. The API URL is correct")
+                console.print("Please check that your API credentials are correct.")
+                console.print("You can update them by running: specsmith setup")
                 sys.exit(1)
 
     try:
