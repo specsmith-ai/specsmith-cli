@@ -32,7 +32,7 @@ jobs:
       run: poetry install
 
     - name: Run tests
-      run: poetry run pytest tests/ -v 
+      run: poetry run pytest tests/ -v
 
     - name: Run linting
       run: |

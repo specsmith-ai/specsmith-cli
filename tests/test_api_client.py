@@ -1,7 +1,7 @@
 """Tests for the API client module."""
 
-from unittest.mock import AsyncMock, Mock, patch
 from contextlib import asynccontextmanager
+from unittest.mock import AsyncMock, Mock, patch
 
 import httpx
 import pytest

@@ -73,7 +73,8 @@ Advanced alternatives:
 specsmith test
 ```
 
-### 4. Start Chatting
+### 4. Start Workinggit add 0p
+
 
 ```bash
 specsmith
@@ -94,7 +95,7 @@ Example:
 ```
 You: I need a real-time chat app
 
-specsmith: Let’s cover scale, features, tech stack, and platforms. 
+specsmith: Let’s cover scale, features, tech stack, and platforms.
 ...
 ```
 
@@ -203,18 +204,6 @@ More help:
 * Signup: [app.specsmith.ai/signup](https://app.specsmith.ai/signup)
 * Support: [support@specsmith.ai](mailto:support@specsmith.ai)
 
-## 🤝 Contributing
-
-```bash
-git clone https://github.com/specsmith-ai/specsmith-cli.git
-cd specsmith-cli
-poetry install
-poetry run pytest -v
-```
-
-* Fork → branch → code → test → PR
-* Lint with `black` + `isort` before pushing
-
 ## 📄 License
 
 MIT License — see [LICENSE](LICENSE)
@@ -234,7 +223,7 @@ Good code starts with good specs. specsmith makes your requirements:
 
 <div align="center">
 
-**[Get Started](https://specsmith.ai)** • **[Signup](https://app.specsmith.ai/signup)** • **[Docs](https://github.com/specsmith-ai/specsmith-cli#readme)** • **[Community](https://github.com/specsmith-ai/specsmith-cli/discussions)**
+**[Get Started](https://specsmith.ai)** • **[Signup](https://app.specsmith.ai/signup)** • **[Docs](https://github.com/specsmith-ai/specsmith-cli#readme)**
 
 Made with ❤️ by specsmith
 
