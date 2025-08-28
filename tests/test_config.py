@@ -6,15 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from specsmith_cli.config import (
-    Config,
-    get_config_dir,
-    get_credentials_file,
-    load_config,
-    load_credentials_from_file,
-    save_credentials_to_file,
-    validate_credentials,
-)
+from specsmith_cli.config import Config, load_config, validate_credentials
 
 
 def test_config_auth_header():
@@ -38,13 +30,13 @@ def test_config_auth_header():
 
 def test_get_config_dir():
     """Test getting the config directory."""
-    config_dir = get_config_dir()
+    config_dir = Config.get_config_dir()
     assert config_dir == Path.home() / ".specsmith"
 
 
 def test_get_credentials_file():
     """Test getting the credentials file path."""
-    cred_file = get_credentials_file()
+    cred_file = Config.get_credentials_file()
     assert cred_file == Path.home() / ".specsmith" / "credentials"
 
 
@@ -56,15 +48,22 @@ def test_save_and_load_credentials():
         Path.home = lambda: Path(temp_dir)
 
         try:
-            # Test saving credentials
-            save_credentials_to_file("test-id", "test-token")
+            # Create a config and save it
+            config = Config(
+                api_url="http://localhost:8000",
+                access_key_id="test-id",
+                access_key_token="test-token",
+                debug=False,
+            )
+            config.save_to_file()
 
             # Test loading credentials
-            creds = load_credentials_from_file()
-            assert creds is not None
-            access_key_id, access_key_token = creds
-            assert access_key_id == "test-id"
-            assert access_key_token == "test-token"
+            loaded_config = Config.load_from_file()
+            assert loaded_config is not None
+            assert loaded_config.access_key_id == "test-id"
+            assert loaded_config.access_key_token == "test-token"
+            assert loaded_config.api_url == "http://localhost:8000"
+            assert loaded_config.debug is False
 
         finally:
             # Restore original home function
@@ -79,8 +78,8 @@ def test_load_credentials_from_nonexistent_file():
         Path.home = lambda: Path(temp_dir)
 
         try:
-            creds = load_credentials_from_file()
-            assert creds is None
+            config = Config.load_from_file()
+            assert config is None
         finally:
             Path.home = original_home
 
@@ -134,21 +133,19 @@ def test_load_config_missing_credentials():
             original_env[key] = os.environ[key]
             del os.environ[key]
 
-    # Mock the credentials file to return None
-    original_load_creds = load_credentials_from_file
+    # Mock the Config.load_from_file to return None (no file)
+    original_load_from_file = Config.load_from_file
     try:
-        # Mock the function to return None
-        import specsmith_cli.config
-
-        specsmith_cli.config.load_credentials_from_file = lambda: None
+        # Mock the method to return None
+        Config.load_from_file = classmethod(lambda cls: None)
 
         with pytest.raises(ValueError, match="API credentials not found"):
             load_config()
     finally:
-        # Restore environment variables and function
+        # Restore environment variables and method
         for key, value in original_env.items():
             os.environ[key] = value
-        specsmith_cli.config.load_credentials_from_file = original_load_creds
+        Config.load_from_file = original_load_from_file
 
 
 def test_validate_credentials():

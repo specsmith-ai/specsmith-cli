@@ -1,11 +1,11 @@
 """Utility functions for the Specsmith CLI."""
 
 import os
-import sys
 from pathlib import Path
 from typing import Optional
 
 from rich.console import Console
+from rich.prompt import Confirm
 
 console = Console()
 
@@ -94,8 +94,6 @@ def suggest_filename(base_name: str, extension: str = "") -> str:
 
 def confirm_overwrite(filename: str) -> bool:
     """Ask user to confirm file overwrite."""
-    from rich.prompt import Confirm
-
     return Confirm.ask(
         f"File '{filename}' already exists. Do you want to overwrite it?", default=False
     )
@@ -103,8 +101,6 @@ def confirm_overwrite(filename: str) -> bool:
 
 def confirm_save(filename: str) -> bool:
     """Ask user to confirm file save."""
-    from rich.prompt import Confirm
-
     return Confirm.ask(f"Save file '{filename}'?", default=True)
 
 

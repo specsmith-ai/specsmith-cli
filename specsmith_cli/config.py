@@ -1,5 +1,6 @@
 """Configuration management for the Specsmith CLI."""
 
+import base64
 import os
 from pathlib import Path
 from typing import Optional
@@ -28,8 +29,6 @@ class Config:
     @property
     def auth_header(self) -> str:
         """Get the authorization header for API requests."""
-        import base64
-
         credentials = f"{self.access_key_id}:{self.access_key_token}"
         encoded_credentials = base64.b64encode(credentials.encode()).decode()
         return f"Basic {encoded_credentials}"
