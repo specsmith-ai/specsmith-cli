@@ -59,9 +59,10 @@ jobs:
     needs: test
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
-    environment: release
+    environment:
+      name: release
     permissions:
-      id-token: write  # Required for trusted publishing
+      id-token: write  # Required for trusted publishing to PyPI
       contents: write  # Required to create GitHub release
 
     steps:
@@ -112,13 +113,8 @@ jobs:
         echo "Package contents:"
         tar -tzf dist/*.tar.gz | head -20
 
-    - name: Publish to PyPI
-      env:
-        POETRY_PYPI_TOKEN_PYPI: ${{ secrets.PYPI_API_TOKEN }}
-      run: |
-        echo "Publishing to PyPI..."
-        poetry publish --no-interaction
-        echo "Successfully published to PyPI!"
+    - name: Publish to PyPI using Trusted Publishing
+      uses: pypa/gh-action-pypi-publish@release/v1
 
     - name: Create GitHub Release
       uses: softprops/action-gh-release@v2
@@ -129,5 +125,3 @@ jobs:
         prerelease: false
         name: "Release ${{ steps.extract_version.outputs.version }}"
         tag_name: ${{ github.ref_name }}
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
