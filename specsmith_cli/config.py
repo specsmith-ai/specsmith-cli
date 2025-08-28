@@ -138,7 +138,7 @@ def setup_credentials_interactive() -> None:
     console.print("You can get your API keys from the Specsmith web interface.")
     console.print()
 
-    api_url = Prompt.ask("API URL", default="http://localhost:8000")
+    api_url = Prompt.ask("API URL", default="https://api.specsmith.ai")
     access_key_id = Prompt.ask("Access Key ID")
     access_key_token = Prompt.ask("Access Key Token", password=True)
     debug = Prompt.ask("Enable debug mode?", choices=["y", "n"], default="n") == "y"
