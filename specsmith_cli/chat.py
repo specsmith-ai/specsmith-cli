@@ -129,8 +129,10 @@ class ChatInterface:
             self.console.print()  # Add spacing after welcome
 
             # Show input instructions once
+            self.console.print(" • Press [bold]Shift+Enter[/bold] for a new line")
+            self.console.print(" • Press [bold]Enter[/bold] to submit")
             self.console.print(
-                "[dim]Use 'shift+enter' to continue on the next line and 'enter' to submit[/dim]"
+                " • Type [italic]quit[/italic] or press [bold]Ctrl+C[/bold] / [bold]Ctrl+D[/bold] to exit"
             )
             self.console.print()
 
@@ -151,7 +153,7 @@ class ChatInterface:
             self.api_client = SpecSmithAPIClient(self.config)
 
             # Test connection
-            self.console.print("[dim]Testing connection to Specsmith API...[/dim]")
+            self.console.print("[dim]Connecting to Specsmith API...[/dim]")
             if not await self.api_client.test_connection():
                 self.console.print("[red]❌ Failed to connect to Specsmith API[/red]")
                 self.console.print(
