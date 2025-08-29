@@ -1,0 +1,127 @@
+name: Release to PyPI
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'  # Triggers on semantic version tags like v1.0.0, v0.1.0, etc.
+
+jobs:
+  test:
+    name: Test Package
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.9", "3.10", "3.11", "3.12"]
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - name: Install Poetry
+      uses: snok/install-poetry@v1
+      with:
+        version: latest
+        virtualenvs-create: true
+        virtualenvs-in-project: true
+
+    - name: Load cached venv
+      id: cached-poetry-dependencies
+      uses: actions/cache@v4
+      with:
+        path: .venv
+        key: venv-${{ runner.os }}-${{ matrix.python-version }}-${{ hashFiles('**/poetry.lock') }}
+
+    - name: Install dependencies
+      if: steps.cached-poetry-dependencies.outputs.cache-hit != 'true'
+      run: poetry install --no-interaction --no-root
+
+    - name: Install project
+      run: poetry install --no-interaction
+
+    - name: Run tests
+      run: poetry run pytest tests/ -v --tb=short
+
+    - name: Run linting
+      run: |
+        poetry run black --check .
+        poetry run isort --check-only .
+
+    - name: Build package (test)
+      run: poetry build
+
+  publish:
+    name: Publish Package
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    environment:
+      name: release
+    permissions:
+      id-token: write  # Required for trusted publishing to PyPI
+      contents: write  # Required to create GitHub release
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.11"
+
+    - name: Install Poetry
+      uses: snok/install-poetry@v1
+      with:
+        version: latest
+        virtualenvs-create: true
+        virtualenvs-in-project: true
+
+    - name: Extract version from tag
+      id: extract_version
+      run: |
+        # Extract version from tag (remove 'v' prefix)
+        VERSION=${GITHUB_REF#refs/tags/v}
+        echo "version=$VERSION" >> $GITHUB_OUTPUT
+        echo "Extracted version: $VERSION"
+
+        # Validate semantic version format
+        if [[ ! $VERSION =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+          echo "Error: Invalid semantic version format: $VERSION"
+          exit 1
+        fi
+
+    - name: Update version in pyproject.toml
+      run: |
+        poetry version ${{ steps.extract_version.outputs.version }}
+        echo "Updated pyproject.toml version to ${{ steps.extract_version.outputs.version }}"
+
+    - name: Install dependencies
+      run: poetry install --no-interaction
+
+    - name: Build package
+      run: poetry build
+
+    - name: Check package contents
+      run: |
+        echo "Built packages:"
+        ls -la dist/
+        echo "Package contents:"
+        tar -tzf dist/*.tar.gz | head -20
+
+    - name: Publish to PyPI using Trusted Publishing
+      uses: pypa/gh-action-pypi-publish@release/v1
+
+    - name: Create GitHub Release
+      uses: softprops/action-gh-release@v2
+      with:
+        files: dist/*
+        generate_release_notes: true
+        draft: false
+        prerelease: false
+        name: "Release ${{ steps.extract_version.outputs.version }}"
+        tag_name: ${{ github.ref_name }}
