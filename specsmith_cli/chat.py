@@ -9,8 +9,11 @@ from prompt_toolkit.formatted_text import HTML
 from prompt_toolkit.key_binding import KeyBindings
 from prompt_toolkit.styles import Style
 from rich.console import Console
+from rich.live import Live
+from rich.markdown import Markdown
 from rich.panel import Panel
 from rich.prompt import Confirm
+from rich.text import Text
 
 from .api_client import SpecSmithAPIClient
 from .config import Config
@@ -26,6 +29,9 @@ class ChatInterface:
         self.api_client: Optional[SpecSmithAPIClient] = None
         self.current_directory = os.getcwd()
         self.project_name = Path(self.current_directory).name
+        self.history: list[
+            dict[str, str]
+        ] = []  # {role: "user|assistant|system", content: str}
 
         # Create prompt session with custom key bindings
         self.prompt_session = self._create_prompt_session()
@@ -58,6 +64,34 @@ class ChatInterface:
             wrap_lines=True,
         )
 
+    def _normalize_markdown_alignment(self, content: str) -> str:
+        """Normalize excessive left-padding outside fenced code blocks for better rendering.
+
+        Keeps fenced code blocks verbatim; trims trailing whitespace; for non-code
+        lines with more than 6 leading spaces, left-strips the spaces.
+        """
+        lines = content.splitlines()
+        normalized: list[str] = []
+        in_code = False
+        for line in lines:
+            rline = line.rstrip()
+            lstripped = rline.lstrip()
+            if lstripped.startswith("```"):
+                in_code = not in_code
+                normalized.append(rline)
+                continue
+            if in_code:
+                normalized.append(rline)
+                continue
+            leading = len(rline) - len(rline.lstrip(" "))
+            if leading > 6:
+                normalized.append(rline.lstrip(" "))
+            else:
+                normalized.append(rline)
+        return "\n".join(normalized)
+
+    # Removed fullscreen application helpers
+
     def _show_welcome_screen(self) -> None:
         """Display the Claude Code-style welcome screen with panels."""
         # Clear screen
@@ -73,7 +107,6 @@ class ChatInterface:
             padding=(1, 2),
         )
         self.console.print(welcome_panel)
-        self.console.print()
 
     async def start(self) -> None:
         """Start the chat interface."""
@@ -140,8 +173,7 @@ class ChatInterface:
 
     async def _get_multiline_input(self) -> str:
         """Get user input with backslash line continuation support."""
-        # Show a simple prompt before input
-        self.console.print()
+        # Do not print an extra blank line here; spacing is handled by callers
 
         lines = []
         first_line = True
@@ -154,13 +186,27 @@ class ChatInterface:
                 prompt = HTML("<ansibrightblack>  \\ </ansibrightblack>")
 
             try:
-                line = await self.prompt_session.prompt_async(prompt, style=self.style)
+                # Prompt for a line; we'll explicitly clear it from the terminal afterwards
+                line = await self.prompt_session.prompt_async(
+                    prompt,
+                    style=self.style,
+                )
             except EOFError:
                 # Ctrl+D pressed - propagate the EOFError to be handled by the main loop
                 raise
 
             # Strip any trailing whitespace first
             line = line.rstrip()
+
+            # Clear the previously echoed input line so only the panel shows the user message
+            # Emit ANSI escape sequences directly to the underlying stream
+            try:
+                stream = self.console.file
+                stream.write("\x1b[1A\r\x1b[K")
+                stream.flush()
+            except Exception:
+                # If the terminal does not support ANSI, ignore
+                pass
 
             if line.endswith("\\"):
                 # Line continuation - remove backslash and any trailing whitespace
@@ -174,44 +220,57 @@ class ChatInterface:
         return "\n".join(lines)
 
     def _show_user_message(self, message: str) -> None:
-        """Display the user's message in a panel."""
+        """Display the user's message in a panel, prefixed with '> ' on first line."""
+        # Prefix first line with "> " and indent subsequent lines for readability
+        lines = message.splitlines() or [""]
+        prefixed_lines = [("> " + lines[0]) if lines else "> "]
+        for ln in lines[1:]:
+            prefixed_lines.append("  " + ln)
+
         user_panel = Panel(
-            message,
+            Text("\n".join(prefixed_lines), style="dim"),
             title=None,
             border_style="bright_black",
             padding=(0, 1),
             title_align="left",
         )
+        # Ensure exactly one blank line before showing the user panel
         self.console.print()
         self.console.print(user_panel)
+        # And exactly one blank line after the user panel before assistant output
+        self.console.print()
 
     async def _send_message(self, message: str) -> None:
-        """Send a message and handle the streaming response."""
+        """Send a message and stream the response using Rich Live panel."""
         if not self.api_client or not self.session_id:
             raise ValueError("API client or session not initialized")
 
         try:
-            # Show agent indicator (bright dot)
+            response_text = ""
+            # Ensure a blank line precedes assistant output for consistent spacing
             self.console.print()
-            self.console.print("● ", end="", style="bright_white")
-
-            async for action in self.api_client.send_message(self.session_id, message):
-                if action.get("type") == "message":
-                    content = action.get("content", "")
-                    if content:
-                        # Print content with full brightness, no markup
-                        self.console.print(
-                            content, end="", markup=False, style="bright_white"
-                        )
-                else:
-                    # Handle non-message actions
-                    await self._handle_action(action)
-
-            # Add newline after response
+            # Stream as plain text for stability, then finalize as Markdown once complete
+            with Live(
+                Text(response_text), refresh_per_second=30, console=self.console
+            ) as live:
+                async for action in self.api_client.send_message(
+                    self.session_id, message
+                ):
+                    if action.get("type") == "message":
+                        content = action.get("content", "")
+                        if content:
+                            response_text += content
+                            live.update(Text(response_text))
+                    else:
+                        await self._handle_action(action)
+                # After stream completes, render formatted Markdown once
+                final_text = self._normalize_markdown_alignment(response_text)
+                live.update(Markdown(final_text))
+            # One trailing blank line after assistant output to separate from next turn
             self.console.print()
 
         except Exception as e:
-            self.console.print(f"[red]❌ Error sending message: {e}[/red]")
+            self.console.print(f"[red]❌ Error: {e}[/red]")
 
     async def _handle_action(self, action: Dict[str, Any]) -> None:
         """Handle different types of actions from the API."""
@@ -224,11 +283,9 @@ class ChatInterface:
         elif action_type == "file":
             await self._handle_file_action(action)
         elif action_type == "tool_use":
-            # Print whisper for tool use in dim style
             description = action.get("description") or action.get("tool_name", "tool")
             self.console.print(f"[dim]( {description} )…[/dim]")
         elif action_type == "limit_message":
-            # Print limit message as whisper without ellipses
             content = action.get("content", "")
             if content:
                 self.console.print(f"[dim]{content}[/dim]")
