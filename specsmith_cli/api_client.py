@@ -1,8 +1,7 @@
 """API client for communicating with the Specsmith Agent API."""
 
-import asyncio
 import json
-from typing import Any, AsyncGenerator, Dict, Optional
+from typing import Any, AsyncGenerator, Dict
 
 import httpx
 from rich.console import Console
@@ -52,10 +51,6 @@ class SpecSmithAPIClient:
             response.raise_for_status()
             data = response.json()
             session_id = data["session_id"]
-
-            if self.config.debug:
-                self.console.print(f"[green]Created session: {session_id}[/green]")
-
             return session_id
         except httpx.HTTPStatusError as e:
             if e.response.status_code == 401:
