@@ -99,8 +99,11 @@ def load_config(
     debug: Optional[bool] = None,
 ) -> Config:
     """Load configuration from various sources."""
-    # Environment variables
-    final_api_url = api_url or os.getenv("SPECSMITH_API_URL") or DEFAULT_API_URL
+    # First, read any config from file for fallback purposes
+    file_config = Config.load_from_file()
+
+    # Environment variables and CLI options take precedence
+    final_api_url = api_url or os.getenv("SPECSMITH_API_URL")
     final_access_key_id = access_key_id or os.getenv("SPECSMITH_ACCESS_KEY_ID")
     final_access_key_token = access_key_token or os.getenv("SPECSMITH_ACCESS_KEY_TOKEN")
     final_debug = debug or os.getenv("SPECSMITH_DEBUG", "").lower() in (
@@ -109,15 +112,16 @@ def load_config(
         "yes",
     )
 
-    # Try to load from file if credentials not provided
-    if not final_access_key_id or not final_access_key_token:
-        file_config = Config.load_from_file()
-        if file_config:
-            final_access_key_id = final_access_key_id or file_config.access_key_id
-            final_access_key_token = (
-                final_access_key_token or file_config.access_key_token
-            )
-            final_debug = final_debug or file_config.debug
+    # Fall back to file values where not provided
+    if not final_api_url and file_config:
+        final_api_url = file_config.api_url
+    if (not final_access_key_id or not final_access_key_token) and file_config:
+        final_access_key_id = final_access_key_id or file_config.access_key_id
+        final_access_key_token = final_access_key_token or file_config.access_key_token
+        final_debug = final_debug or file_config.debug
+
+    # Final fallback to defaults
+    final_api_url = final_api_url or DEFAULT_API_URL
 
     if not final_access_key_id or not final_access_key_token:
         raise ValueError(

@@ -42,7 +42,7 @@ def _start_chat(ctx: click.Context) -> None:
 @click.option(
     "--api-url",
     envvar="SPECSMITH_API_URL",
-    default="https://api.specsmith.ai",
+    default=None,
     help="Specsmith API URL",
 )
 @click.option(
@@ -106,10 +106,6 @@ def setup(ctx: click.Context) -> None:
     """Set up API credentials interactively."""
     console.print("[bold blue]Specsmith CLI Setup[/bold blue]")
     console.print()
-    console.print("This will help you configure your API credentials.")
-    console.print("You can get your API keys from the Specsmith web interface.")
-    console.print()
-
     setup_credentials_interactive()
 
 

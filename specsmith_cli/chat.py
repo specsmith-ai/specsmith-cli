@@ -1,7 +1,6 @@
-"""Chat interface for the Specsmith CLI."""
+"""Chat interface for the Specsmith Agent."""
 
 import os
-from pathlib import Path
 from typing import Any, Dict, Optional
 
 from prompt_toolkit import PromptSession
@@ -12,12 +11,12 @@ from rich.console import Console
 from rich.live import Live
 from rich.markdown import Markdown
 from rich.panel import Panel
-from rich.prompt import Confirm
 from rich.spinner import Spinner
 from rich.text import Text
 
 from .api_client import SpecSmithAPIClient
 from .config import Config
+from .utils import handle_file_action
 
 
 class ChatInterface:
@@ -117,7 +116,7 @@ class ChatInterface:
             welcome_panel = Panel(
                 "[#D4A63D]* Welcome to Specsmith Agent![/]\n\n  [bold]How can I help you today?[/bold]\n\n  [italic]I can help you create, refine, and manage software specifications.[/italic]",
                 title=None,
-                border_style="#6AA9FF",  # Blueprint Wash blue
+                border_style="#6AA9FF",
                 padding=(1, 2),
             )
             self.console.print(welcome_panel)
@@ -283,8 +282,6 @@ class ChatInterface:
             padding=(0, 1),
             title_align="left",
         )
-        # Ensure exactly one blank line before showing the user panel
-        self.console.print()
         self.console.print(user_panel)
         # And exactly one blank line after the user panel before assistant output
         self.console.print()
@@ -328,7 +325,7 @@ class ChatInterface:
                         pending_file_actions.append(action)
                     else:
                         # Handle other actions immediately (tool_use, limit_message, etc.)
-                        await self._handle_non_file_action(action)
+                        await self._handle_action(action)
 
             # Handle file actions after Live context ends to allow prompts to display
             for action in pending_file_actions:
@@ -379,67 +376,8 @@ class ChatInterface:
                 self.console.print(f"[yellow]Unknown action type: {action}[/yellow]")
 
     async def _handle_file_action(self, action: Dict[str, Any]) -> None:
-        """Handle file actions with user prompts."""
-        filename = action.get("filename", "")
-        content = action.get("content", "")
-
-        if self.config.debug:
-            self.console.print(
-                f"[cyan]DEBUG: File action received - filename: {filename}, content length: {len(content) if content else 0}[/cyan]"
-            )
-
-        if not filename or not content:
-            if self.config.debug:
-                self.console.print(
-                    "[cyan]DEBUG: Missing filename or content, skipping[/cyan]"
-                )
-            return
-
-        file_path = Path(filename)
-
-        # Check if file exists
-        if file_path.exists():
-            if self.config.debug:
-                self.console.print(
-                    f"[cyan]DEBUG: File exists, asking for overwrite[/cyan]"
-                )
-            # File exists, ask for overwrite
-            overwrite = Confirm.ask(
-                f"File '{filename}' already exists. Do you want to overwrite it?",
-                default=False,
-            )
-            if not overwrite:
-                self.console.print(f"[yellow]Skipped saving {filename}[/yellow]")
-                return
-        else:
-            if self.config.debug:
-                self.console.print(
-                    f"[cyan]DEBUG: File doesn't exist, asking to save[/cyan]"
-                )
-            # File doesn't exist, ask for save with content summary
-            content_lines = len(content.splitlines()) if content else 0
-            content_size = (
-                f"{len(content)} chars, {content_lines} lines" if content else "empty"
-            )
-            save = Confirm.ask(
-                f"Save file '{filename}' ({content_size})?", default=True
-            )
-            if not save:
-                self.console.print(f"[yellow]Skipped saving {filename}[/yellow]")
-                return
-
-        # Save the file
-        try:
-            # Ensure directory exists
-            file_path.parent.mkdir(parents=True, exist_ok=True)
-
-            with open(file_path, "w") as f:
-                f.write(content)
-
-            self.console.print(f"[green]✅ Saved {filename}[/green]")
-
-        except Exception as e:
-            self.console.print(f"[red]❌ Failed to save {filename}: {e}[/red]")
+        """Delegate file actions to utility handler."""
+        await handle_file_action(self.console, action, debug=self.config.debug)
 
     async def send_single_message(self, message: str) -> None:
         """Send a single message and exit."""
