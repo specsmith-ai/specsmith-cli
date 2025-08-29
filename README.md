@@ -1,4 +1,4 @@
-# specsmith CLI
+# Specsmith CLI
 
 > **Forge clear specifications from product ideas.**
 > *AI-powered agent for developers and builders.*
@@ -7,11 +7,11 @@
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-The specsmith CLI is a thin client for AI-powered specification generation. Run `specsmith`, describe what you need, and get structured, implementation-ready technical specs.
+The Specsmith CLI is a thin client for AI-powered specification generation using the Specsmith platform. Run `specsmith`, describe what you need, and get structured, implementation-ready technical specs.
 
-## 🚀 What is specsmith?
+## 🚀 What is Specsmith?
 
-specsmith helps engineers move from rough ideas to actionable specifications. It asks clarifying questions, identifies ambiguities, and produces detailed specs designed to feed directly into AI coding agents or human implementation.
+Specsmith helps engineers move from rough ideas to actionable specifications. It asks clarifying questions, identifies ambiguities, and produces detailed specs designed to feed directly into AI coding agents or human implementation.
 
 ### ✨ Key Capabilities
 
@@ -39,7 +39,7 @@ specsmith --version
 
 ### 1. Get Your API Keys
 
-Sign up at [specsmith.ai](https://specsmith.ai) or go straight to [signup](https://app.specsmith.ai/signup) → **Settings** → **API Keys** → generate a new key pair.
+Learn more at [specsmith.ai](https://specsmith.ai) or go straight to [signup](https://app.specsmith.ai/signup) → **Settings** → **API Keys** → generate a new key pair.
 
 ### 2. Configure Authentication
 
