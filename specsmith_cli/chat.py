@@ -127,6 +127,13 @@ class ChatInterface:
             )
             self.console.print(welcome_panel)
             self.console.print()  # Add spacing after welcome
+
+            # Show input instructions once
+            self.console.print(
+                "[dim]Use 'shift+enter' to continue on the next line and 'enter' to submit[/dim]"
+            )
+            self.console.print()
+
             self.welcome_shown = True
 
     def _show_welcome_screen(self) -> None:
