@@ -205,24 +205,24 @@ class ChatInterface:
 
     async def _get_multiline_input(self) -> str:
         """Get user input with backslash line continuation support."""
-        # Do not print an extra blank line here; spacing is handled by callers
+        # Show a simple prompt before input
+        self.console.print()
 
         lines = []
         first_line = True
+        lines_entered = 0  # Track how many lines we've processed
 
         while True:
             if first_line:
                 prompt = HTML("<ansibrightblack>> </ansibrightblack>")
                 first_line = False
             else:
-                prompt = HTML("<ansibrightblack>  \\ </ansibrightblack>")
+                # Use invisible prompt - just spaces for positioning
+                prompt = "  "
 
             try:
-                # Prompt for a line; we'll explicitly clear it from the terminal afterwards
-                line = await self.prompt_session.prompt_async(
-                    prompt,
-                    style=self.style,
-                )
+                line = await self.prompt_session.prompt_async(prompt, style=self.style)
+                lines_entered += 1
             except EOFError:
                 # Ctrl+D pressed - propagate the EOFError to be handled by the main loop
                 raise
@@ -230,24 +230,37 @@ class ChatInterface:
             # Strip any trailing whitespace first
             line = line.rstrip()
 
-            # Clear the previously echoed input line so only the panel shows the user message
-            # Emit ANSI escape sequences directly to the underlying stream
-            try:
-                stream = self.console.file
-                stream.write("\x1b[1A\r\x1b[K")
-                stream.flush()
-            except Exception:
-                # If the terminal does not support ANSI, ignore
-                pass
-
             if line.endswith("\\"):
                 # Line continuation - remove backslash and any trailing whitespace
                 clean_line = line[:-1].rstrip()
                 lines.append(clean_line)
+
+                # Clear the line that shows the backslash, replace with clean version
+                try:
+                    stream = self.console.file
+                    stream.write("\x1b[1A\r\x1b[K")  # Clear the line with backslash
+                    stream.flush()
+                except Exception:
+                    pass
+
+                # Show the clean line without backslash
+                if len(lines) == 1:  # First line
+                    self.console.print(f"> {clean_line}")
+                else:  # Continuation lines
+                    self.console.print(f"  {clean_line}")
             else:
                 # End of input - add the line as-is
                 lines.append(line)
                 break
+
+        # Clear all the input lines we've shown
+        try:
+            stream = self.console.file
+            for _ in range(lines_entered):
+                stream.write("\x1b[1A\r\x1b[K")
+            stream.flush()
+        except Exception:
+            pass
 
         return "\n".join(lines)
 
