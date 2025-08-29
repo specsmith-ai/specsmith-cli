@@ -67,27 +67,49 @@ class ChatInterface:
     def _normalize_markdown_alignment(self, content: str) -> str:
         """Normalize excessive left-padding outside fenced code blocks for better rendering.
 
-        Keeps fenced code blocks verbatim; trims trailing whitespace; for non-code
-        lines with more than 6 leading spaces, left-strips the spaces.
+        Keeps fenced code blocks verbatim; preserves proper markdown indentation;
+        only removes excessive leading spaces that would cause unintended code blocks.
         """
         lines = content.splitlines()
         normalized: list[str] = []
         in_code = False
+
         for line in lines:
             rline = line.rstrip()
             lstripped = rline.lstrip()
+
+            # Handle fenced code blocks
             if lstripped.startswith("```"):
                 in_code = not in_code
                 normalized.append(rline)
                 continue
+
+            # Preserve content inside fenced code blocks
             if in_code:
                 normalized.append(rline)
                 continue
-            leading = len(rline) - len(rline.lstrip(" "))
-            if leading > 6:
-                normalized.append(rline.lstrip(" "))
+
+            # For non-code content, be more careful about preserving markdown structure
+            leading_spaces = len(rline) - len(lstripped)
+
+            # Preserve proper markdown indentation (2-3 spaces for nested lists, blockquotes)
+            if leading_spaces <= 3:
+                normalized.append(rline)
+            # Only strip when we have excessive indentation (4+ spaces) that would trigger code blocks
+            elif leading_spaces >= 4:
+                # Check if this might be intentional indentation for nested elements
+                if lstripped.startswith(("-", "*", "+")) and leading_spaces <= 6:
+                    # Preserve reasonable list indentation (up to 6 spaces)
+                    normalized.append(rline)
+                elif lstripped.startswith(">") and leading_spaces <= 6:
+                    # Preserve reasonable blockquote indentation
+                    normalized.append(rline)
+                else:
+                    # Strip excessive indentation that would cause code blocks
+                    normalized.append(lstripped)
             else:
                 normalized.append(rline)
+
         return "\n".join(normalized)
 
     # Removed fullscreen application helpers
@@ -99,9 +121,7 @@ class ChatInterface:
 
         # Welcome panel with Specsmith brand colors
         welcome_panel = Panel(
-            "[#D4A63D]✻ Welcome to Specsmith Agent![/]\n\n  How can I help you today?\n  I can help you create, refine, and manage software specifications.\n\n  [dim]cwd: "
-            + self.current_directory
-            + "[/dim]",
+            "[#D4A63D]✻ Welcome to Specsmith Agent![/]\n\n  How can I help you today?\n  I can help you create, refine, and manage software specifications.\n",
             title=None,
             border_style="#6AA9FF",  # Blueprint Wash blue
             padding=(1, 2),
@@ -249,9 +269,10 @@ class ChatInterface:
             response_text = ""
             # Ensure a blank line precedes assistant output for consistent spacing
             self.console.print()
-            # Stream as plain text for stability, then finalize as Markdown once complete
+
+            # Start with empty Markdown object for consistency
             with Live(
-                Text(response_text), refresh_per_second=30, console=self.console
+                Markdown(""), refresh_per_second=10, console=self.console
             ) as live:
                 async for action in self.api_client.send_message(
                     self.session_id, message
@@ -260,12 +281,14 @@ class ChatInterface:
                         content = action.get("content", "")
                         if content:
                             response_text += content
-                            live.update(Text(response_text))
+                            # Apply markdown normalization before rendering
+                            normalized_text = self._normalize_markdown_alignment(
+                                response_text
+                            )
+                            live.update(Markdown(normalized_text))
                     else:
                         await self._handle_action(action)
-                # After stream completes, render formatted Markdown once
-                final_text = self._normalize_markdown_alignment(response_text)
-                live.update(Markdown(final_text))
+
             # One trailing blank line after assistant output to separate from next turn
             self.console.print()
 
