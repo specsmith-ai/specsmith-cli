@@ -91,7 +91,7 @@ class SpecSmithAPIClient:
                                 try:
                                     action = json.loads(line)
                                     yield action
-                                except json.JSONDecodeError as e:
+                                except json.JSONDecodeError:
                                     if self.config.debug:
                                         self.console.print(
                                             f"[yellow]Failed to parse JSON: {line}[/yellow]"

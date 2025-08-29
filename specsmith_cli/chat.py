@@ -13,6 +13,7 @@ from rich.live import Live
 from rich.markdown import Markdown
 from rich.panel import Panel
 from rich.prompt import Confirm
+from rich.spinner import Spinner
 from rich.text import Text
 
 from .api_client import SpecSmithAPIClient
@@ -32,6 +33,9 @@ class ChatInterface:
         self.history: list[
             dict[str, str]
         ] = []  # {role: "user|assistant|system", content: str}
+
+        # Track if we've shown the welcome message
+        self.welcome_shown = False
 
         # Create prompt session with custom key bindings
         self.prompt_session = self._create_prompt_session()
@@ -112,21 +116,26 @@ class ChatInterface:
 
         return "\n".join(normalized)
 
-    # Removed fullscreen application helpers
+    def _show_welcome_message(self) -> None:
+        """Show the welcome message if not already shown."""
+        if not self.welcome_shown:
+            welcome_panel = Panel(
+                "[#D4A63D]* Welcome to Specsmith Agent![/]\n\n  [bold]How can I help you today?[/bold]\n\n  [italic]I can help you create, refine, and manage software specifications.[/italic]",
+                title=None,
+                border_style="#6AA9FF",  # Blueprint Wash blue
+                padding=(1, 2),
+            )
+            self.console.print(welcome_panel)
+            self.console.print()  # Add spacing after welcome
+            self.welcome_shown = True
 
     def _show_welcome_screen(self) -> None:
-        """Display the Claude Code-style welcome screen with panels."""
+        """Display the welcome screen."""
         # Clear screen
         os.system("clear" if os.name == "posix" else "cls")
 
-        # Welcome panel with Specsmith brand colors
-        welcome_panel = Panel(
-            "[#D4A63D]✻ Welcome to Specsmith Agent![/]\n\n  How can I help you today?\n  I can help you create, refine, and manage software specifications.\n",
-            title=None,
-            border_style="#6AA9FF",  # Blueprint Wash blue
-            padding=(1, 2),
-        )
-        self.console.print(welcome_panel)
+        # Show welcome message
+        self._show_welcome_message()
 
     async def start(self) -> None:
         """Start the chat interface."""
@@ -165,6 +174,9 @@ class ChatInterface:
         """Main interactive chat loop."""
         while True:
             try:
+                # Show welcome message if this is the first interaction
+                self._show_welcome_message()
+
                 # Get user input with line continuation support
                 message = await self._get_multiline_input()
 
@@ -175,7 +187,7 @@ class ChatInterface:
                 if not message.strip():
                     continue
 
-                # Show the user's message in a panel
+                # Show the user's message
                 self._show_user_message(message)
 
                 # Send message and handle response
@@ -267,19 +279,26 @@ class ChatInterface:
 
         try:
             response_text = ""
+            first_content_received = False
+
             # Ensure a blank line precedes assistant output for consistent spacing
             self.console.print()
 
-            # Start with empty Markdown object for consistency
-            with Live(
-                Markdown(""), refresh_per_second=10, console=self.console
-            ) as live:
+            # Start with spinner while waiting for first response
+            spinner = Spinner("dots", text="[dim]Thinking...[/dim]")
+
+            with Live(spinner, refresh_per_second=10, console=self.console) as live:
                 async for action in self.api_client.send_message(
                     self.session_id, message
                 ):
                     if action.get("type") == "message":
                         content = action.get("content", "")
                         if content:
+                            # Switch from spinner to markdown on first content
+                            if not first_content_received:
+                                first_content_received = True
+                                live.update(Markdown(""))
+
                             response_text += content
                             # Apply markdown normalization before rendering
                             normalized_text = self._normalize_markdown_alignment(
