@@ -17,7 +17,6 @@ from .config import (
 )
 
 console = Console()
-# Start chat session
 
 
 def _start_chat(ctx: click.Context) -> None:
@@ -27,11 +26,9 @@ def _start_chat(ctx: click.Context) -> None:
         )
         sys.exit(1)
 
-    # Validate credentials
     if not validate_credentials(ctx.obj["config"]):
         console.print("[red]❌ Invalid API credentials format[/red]")
         sys.exit(1)
-    # Run the chat
     try:
         asyncio.run(run_chat(ctx.obj["config"]))
     except KeyboardInterrupt:
@@ -75,15 +72,12 @@ def main(
     """Specsmith CLI - Start a chat session with Specsmith AI."""
     ctx.ensure_object(dict)
 
-    # Store raw options for commands that don't need full config
     ctx.obj["raw_options"] = {
         "api_url": api_url,
         "access_key_id": access_key_id,
         "access_key_token": access_key_token,
         "debug": debug,
     }
-
-    # Try to load config, but don't fail if credentials are missing
     try:
         config = load_config(
             api_url=api_url,
@@ -93,11 +87,8 @@ def main(
         )
         ctx.obj["config"] = config
     except ValueError as e:
-        # Only store error for commands that need config
         ctx.obj["config_error"] = str(e)
         ctx.obj["config"] = None
-
-    # If no subcommand was invoked, start chat
     if ctx.invoked_subcommand is None:
         _start_chat(ctx)
 
@@ -105,7 +96,7 @@ def main(
 @main.command()
 @click.pass_context
 def chat(ctx: click.Context) -> None:
-    """Start a chat session with Specsmith (same as running 'specsmith' without arguments)."""
+    """Start a chat session with Specsmith."""
     _start_chat(ctx)
 
 

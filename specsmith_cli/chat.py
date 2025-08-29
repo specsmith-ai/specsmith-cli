@@ -28,11 +28,6 @@ class ChatInterface:
         self.console = Console()
         self.session_id: Optional[str] = None
         self.api_client: Optional[SpecSmithAPIClient] = None
-        self.current_directory = os.getcwd()
-        self.project_name = Path(self.current_directory).name
-        self.history: list[
-            dict[str, str]
-        ] = []  # {role: "user|assistant|system", content: str}
 
         # Track if we've shown the welcome message
         self.welcome_shown = False
@@ -227,7 +222,7 @@ class ChatInterface:
                 first_line = False
             else:
                 # Use invisible prompt - just spaces for positioning
-                prompt = "  "
+                prompt = HTML("  ")
 
             try:
                 line = await self.prompt_session.prompt_async(prompt, style=self.style)
@@ -302,6 +297,7 @@ class ChatInterface:
         try:
             response_text = ""
             first_content_received = False
+            pending_file_actions = []
 
             # Ensure a blank line precedes assistant output for consistent spacing
             self.console.print()
@@ -327,8 +323,16 @@ class ChatInterface:
                                 response_text
                             )
                             live.update(Markdown(normalized_text))
+                    elif action.get("type") == "file":
+                        # Defer file actions to avoid prompt conflicts with Live display
+                        pending_file_actions.append(action)
                     else:
-                        await self._handle_action(action)
+                        # Handle other actions immediately (tool_use, limit_message, etc.)
+                        await self._handle_non_file_action(action)
+
+            # Handle file actions after Live context ends to allow prompts to display
+            for action in pending_file_actions:
+                await self._handle_file_action(action)
 
             # One trailing blank line after assistant output to separate from next turn
             self.console.print()
@@ -340,20 +344,35 @@ class ChatInterface:
         """Handle different types of actions from the API."""
         action_type = action.get("type")
 
+        if self.config.debug:
+            self.console.print(
+                f"[cyan]DEBUG: Received action type: {action_type}[/cyan]"
+            )
+
         if action_type == "message":
             # Content is handled in _send_message for streaming
             pass
-
         elif action_type == "file":
             await self._handle_file_action(action)
-        elif action_type == "tool_use":
+        else:
+            await self._handle_non_file_action(action)
+
+    async def _handle_non_file_action(self, action: Dict[str, Any]) -> None:
+        """Handle non-file actions that can be processed during Live streaming."""
+        action_type = action.get("type")
+
+        if self.config.debug:
+            self.console.print(
+                f"[cyan]DEBUG: Handling non-file action: {action_type}[/cyan]"
+            )
+
+        if action_type == "tool_use":
             description = action.get("description") or action.get("tool_name", "tool")
             self.console.print(f"[dim]( {description} )…[/dim]")
         elif action_type == "limit_message":
             content = action.get("content", "")
             if content:
                 self.console.print(f"[dim]{content}[/dim]")
-
         else:
             # Unknown action type, just print it
             if self.config.debug:
@@ -364,13 +383,26 @@ class ChatInterface:
         filename = action.get("filename", "")
         content = action.get("content", "")
 
+        if self.config.debug:
+            self.console.print(
+                f"[cyan]DEBUG: File action received - filename: {filename}, content length: {len(content) if content else 0}[/cyan]"
+            )
+
         if not filename or not content:
+            if self.config.debug:
+                self.console.print(
+                    "[cyan]DEBUG: Missing filename or content, skipping[/cyan]"
+                )
             return
 
         file_path = Path(filename)
 
         # Check if file exists
         if file_path.exists():
+            if self.config.debug:
+                self.console.print(
+                    f"[cyan]DEBUG: File exists, asking for overwrite[/cyan]"
+                )
             # File exists, ask for overwrite
             overwrite = Confirm.ask(
                 f"File '{filename}' already exists. Do you want to overwrite it?",
@@ -380,8 +412,18 @@ class ChatInterface:
                 self.console.print(f"[yellow]Skipped saving {filename}[/yellow]")
                 return
         else:
-            # File doesn't exist, ask for save
-            save = Confirm.ask(f"Save file '{filename}'?", default=True)
+            if self.config.debug:
+                self.console.print(
+                    f"[cyan]DEBUG: File doesn't exist, asking to save[/cyan]"
+                )
+            # File doesn't exist, ask for save with content summary
+            content_lines = len(content.splitlines()) if content else 0
+            content_size = (
+                f"{len(content)} chars, {content_lines} lines" if content else "empty"
+            )
+            save = Confirm.ask(
+                f"Save file '{filename}' ({content_size})?", default=True
+            )
             if not save:
                 self.console.print(f"[yellow]Skipped saving {filename}[/yellow]")
                 return

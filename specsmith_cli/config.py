@@ -76,9 +76,7 @@ class Config:
 
             return cls(api_url, access_key_id, access_key_token, debug)
 
-        except Exception as e:
-            if debug:
-                console.print(f"[yellow]Failed to load credentials: {e}[/yellow]")
+        except Exception:
             return None
 
     def save_to_file(self) -> None:
