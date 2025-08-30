@@ -33,7 +33,7 @@ def test_main_invokes_chat_by_default(monkeypatch):
     # Instead run the lightweight `version` subcommand to verify wiring
     result = runner.invoke(main, ["version"], env=_env_with_creds())
     assert result.exit_code == 0
-    assert "Specsmith CLI v" in result.output
+    assert "Specsmith-CLI (v" in result.output
 
 
 def test_main_config_command_outputs(monkeypatch):
