@@ -173,3 +173,6 @@ Desktop.ini
 .credentials
 credentials.txt
 specifications
+
+# Version bumping script (internal use only)
+bump_version.py

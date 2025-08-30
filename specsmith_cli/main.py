@@ -7,6 +7,7 @@ from typing import Optional
 import click
 from rich.console import Console
 
+from . import __version__
 from .api_client import SpecSmithAPIClient
 from .chat import run_chat
 from .config import (
@@ -40,6 +41,11 @@ def _start_chat(ctx: click.Context) -> None:
 
 @click.group(invoke_without_command=True)
 @click.option(
+    "--version",
+    is_flag=True,
+    help="Show version information",
+)
+@click.option(
     "--api-url",
     envvar="SPECSMITH_API_URL",
     default=None,
@@ -64,12 +70,17 @@ def _start_chat(ctx: click.Context) -> None:
 @click.pass_context
 def main(
     ctx: click.Context,
+    version: bool,
     api_url: str,
     access_key_id: Optional[str],
     access_key_token: Optional[str],
     debug: bool,
 ) -> None:
     """Specsmith CLI - Start a chat session with Specsmith AI."""
+    if version:
+        console.print(f"Specsmith-CLI (v{__version__})")
+        return
+
     ctx.ensure_object(dict)
 
     ctx.obj["raw_options"] = {
@@ -114,13 +125,6 @@ def setup(ctx: click.Context) -> None:
 def test(ctx: click.Context) -> None:
     """Test the connection to the Specsmith API."""
     config: Config = ctx.obj.get("config")
-
-    if config is None:
-        console.print(
-            f"[red]❌ Configuration error: {ctx.obj.get('config_error')}[/red]"
-        )
-        sys.exit(1)
-
     console.print("[blue]Testing connection to Specsmith API...[/blue]")
 
     async def test_connection():
@@ -163,9 +167,7 @@ def config(ctx: click.Context) -> None:
 @main.command()
 def version() -> None:
     """Show version information."""
-    from . import __version__
-
-    console.print(f"Specsmith CLI v{__version__}")
+    console.print(f"Specsmith-CLI (v{__version__})")
 
 
 if __name__ == "__main__":
