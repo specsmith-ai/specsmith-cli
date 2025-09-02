@@ -30,7 +30,10 @@ class ChatInterface:
 
         # Track if we've shown the welcome message
         self.welcome_shown = False
-
+        self.supports_shift_enter = os.environ.get("TERM_PROGRAM", "").lower() in (
+            "vscode",
+            "cursor",
+        )
         # Create prompt session with custom key bindings
         self.prompt_session = self._create_prompt_session()
 
@@ -56,9 +59,19 @@ class ChatInterface:
             """Exit on Ctrl+C."""
             event.app.exit(exception=KeyboardInterrupt)
 
+        # Check if we're in a terminal that supports Shift+Enter (like VSCode/Cursor)
+        # For terminals that don't support Shift+Enter, add Ctrl+K as continuation trigger
+        if not self.supports_shift_enter:
+
+            @kb.add("c-k")
+            def _(event):
+                """Add backslash continuation for multiline input in terminals without Shift+Enter support."""
+                event.current_buffer.insert_text("\\")
+                event.current_buffer.validate_and_handle()
+
         return PromptSession(
             key_bindings=kb,
-            multiline=False,  # We'll handle multiline manually
+            multiline=False,  # We'll handle multiline manually with backslash continuation
             wrap_lines=True,
         )
 
@@ -123,8 +136,11 @@ class ChatInterface:
             self.console.print()  # Add spacing after welcome
 
             # Show input instructions once
-            self.console.print(" • Press [bold]Shift+Enter[/bold] for a new line")
-            self.console.print(" • Press [bold]Enter[/bold] to submit")
+            if self.supports_shift_enter:
+                self.console.print(" • Press [bold]Shift+Enter[/bold] for a new line")
+            else:
+                self.console.print(" • Press [bold]Ctrl+K[/bold] for a new line")
+            self.console.print(" • Press [bold]Enter[/bold] to submit your message")
             self.console.print(
                 " • Type [italic]quit[/italic] or press [bold]Ctrl+C[/bold] / [bold]Ctrl+D[/bold] to exit"
             )
