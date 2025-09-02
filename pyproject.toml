@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "specsmith-cli"
-version = "0.1.4"
+version = "0.1.5"
 description = "Official command line interface for SpecSmith - AI-powered code generation and documentation"
 authors = ["SpecSmith Team <team@specsmith.ai>"]
 readme = "README.md"
