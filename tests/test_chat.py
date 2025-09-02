@@ -50,9 +50,8 @@ class TestChatInterface:
             mock_client = AsyncMock()
             mock_client_class.return_value = mock_client
 
-            # Mock successful connection test and session creation
+            # Mock successful connection test
             mock_client.test_connection.return_value = True
-            mock_client.create_session.return_value = "test-session-123"
 
             chat = ChatInterface(config)
 
@@ -66,11 +65,11 @@ class TestChatInterface:
                 # Verify connection was tested
                 mock_client.test_connection.assert_called_once()
 
-                # Verify session was created
-                mock_client.create_session.assert_called_once()
+                # Verify session was NOT created during start (lazy creation)
+                mock_client.create_session.assert_not_called()
 
-                # Verify session ID was set
-                assert chat.session_id == "test-session-123"
+                # Verify session ID is still None (will be set on first message)
+                assert chat.session_id is None
 
                 # Verify interactive loop was called
                 mock_loop.assert_called_once()
@@ -127,6 +126,49 @@ class TestChatInterface:
                 mock_client.aclose.assert_called_once()
 
     @pytest.mark.asyncio
+    async def test_ensure_session_creates_session(self, config):
+        """Test that _ensure_session creates a session when needed."""
+        chat = ChatInterface(config)
+        mock_client = AsyncMock()
+        mock_client.create_session.return_value = "test-session-456"
+        chat.api_client = mock_client
+
+        # Initially no session
+        assert chat.session_id is None
+
+        # Call _ensure_session
+        await chat._ensure_session()
+
+        # Session should be created
+        mock_client.create_session.assert_called_once()
+        assert chat.session_id == "test-session-456"
+
+    @pytest.mark.asyncio
+    async def test_ensure_session_no_duplicate_creation(self, config):
+        """Test that _ensure_session doesn't create duplicate sessions."""
+        chat = ChatInterface(config)
+        mock_client = AsyncMock()
+        chat.api_client = mock_client
+        chat.session_id = "existing-session"
+
+        # Call _ensure_session when session already exists
+        await chat._ensure_session()
+
+        # Should not create a new session
+        mock_client.create_session.assert_not_called()
+        assert chat.session_id == "existing-session"
+
+    @pytest.mark.asyncio
+    async def test_ensure_session_no_client(self, config):
+        """Test that _ensure_session handles missing client gracefully."""
+        chat = ChatInterface(config)
+        # No api_client set
+
+        # Should not raise an exception
+        await chat._ensure_session()
+        assert chat.session_id is None
+
+    @pytest.mark.asyncio
     async def test_interactive_loop_quit_commands(self, config):
         """Test interactive loop with quit commands."""
         chat = ChatInterface(config)
@@ -157,6 +199,24 @@ class TestChatInterface:
 
                     # Should not call send_message for empty inputs
                     mock_send.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_interactive_loop_ensures_session_before_send(self, config):
+        """Test that interactive loop ensures session before sending message."""
+        chat = ChatInterface(config)
+
+        # Mock prompt to return a message, then quit
+        with patch.object(
+            chat, "_get_multiline_input", side_effect=["Hello world", "quit"]
+        ):
+            with patch.object(chat, "_ensure_session") as mock_ensure:
+                with patch.object(chat, "_send_message") as mock_send:
+                    with patch.object(chat.console, "print"):
+                        await chat._interactive_loop()
+
+                        # Should call _ensure_session before sending message
+                        mock_ensure.assert_called_once()
+                        mock_send.assert_called_once_with("Hello world")
 
     @pytest.mark.asyncio
     async def test_interactive_loop_keyboard_interrupt(self, config):
@@ -479,15 +539,15 @@ class TestChatInterface:
         with patch("specsmith_cli.chat.SpecSmithAPIClient") as mock_client_class:
             mock_client = AsyncMock()
             mock_client_class.return_value = mock_client
-            mock_client.create_session.return_value = "test-session"
 
-            with patch.object(chat, "_send_message") as mock_send:
-                await chat.send_single_message("Hello")
+            with patch.object(chat, "_ensure_session") as mock_ensure:
+                with patch.object(chat, "_send_message") as mock_send:
+                    await chat.send_single_message("Hello")
 
-                # Should create session and send message
-                mock_client.create_session.assert_called_once()
-                mock_send.assert_called_once_with("Hello")
-                mock_client.aclose.assert_called_once()
+                    # Should ensure session and send message
+                    mock_ensure.assert_called_once()
+                    mock_send.assert_called_once_with("Hello")
+                    mock_client.aclose.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_send_single_message_exception(self, config):
@@ -497,14 +557,14 @@ class TestChatInterface:
         with patch("specsmith_cli.chat.SpecSmithAPIClient") as mock_client_class:
             mock_client = AsyncMock()
             mock_client_class.return_value = mock_client
-            mock_client.create_session.side_effect = Exception("Session error")
 
-            with patch.object(chat.console, "print") as mock_print:
-                await chat.send_single_message("Hello")
+            with patch.object(chat, "_ensure_session", side_effect=Exception("Session error")):
+                with patch.object(chat.console, "print") as mock_print:
+                    await chat.send_single_message("Hello")
 
-                # Should print error and close client
-                mock_print.assert_called_with("[red]❌ Error: Session error[/red]")
-                mock_client.aclose.assert_called_once()
+                    # Should print error and close client
+                    mock_print.assert_called_with("[red]❌ Error: Session error[/red]")
+                    mock_client.aclose.assert_called_once()
 
 
 class TestRunChat:

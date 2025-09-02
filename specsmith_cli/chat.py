@@ -174,10 +174,8 @@ class ChatInterface:
 
             self.console.print("[green]✅ Connected to Specsmith API[/green]")
 
-            # Create session for chat
-            self.session_id = await self.api_client.create_session()
-
             # Show welcome screen after connection is established
+            # Session will be created lazily on first message
             self._show_welcome_screen()
 
             # Start interactive loop
@@ -208,6 +206,9 @@ class ChatInterface:
 
                 # Show the user's message
                 self._show_user_message(message)
+
+                # Ensure we have a session before sending message (lazy creation)
+                await self._ensure_session()
 
                 # Send message and handle response
                 await self._send_message(message)
@@ -301,6 +302,11 @@ class ChatInterface:
         self.console.print(user_panel)
         # And exactly one blank line after the user panel before assistant output
         self.console.print()
+
+    async def _ensure_session(self) -> None:
+        """Ensure we have a session, creating one if needed."""
+        if not self.session_id and self.api_client:
+            self.session_id = await self.api_client.create_session()
 
     async def _send_message(self, message: str) -> None:
         """Send a message and stream the response using Rich Live panel."""
@@ -401,8 +407,8 @@ class ChatInterface:
             # Initialize API client
             self.api_client = SpecSmithAPIClient(self.config)
 
-            # Create session
-            self.session_id = await self.api_client.create_session()
+            # Create session lazily
+            await self._ensure_session()
 
             # Send message and handle response
             await self._send_message(message)
